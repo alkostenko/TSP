@@ -31,7 +31,7 @@ def LexicalOrder(orderList):
         if orderList[i] < orderList[(i+1)%len(orderList)]:
             x = i
     if x == -1:
-        return orderList
+        return orderList, x
 
     # Step 2 : Find the largest y such that Order[x]<Order[y].
     for i in range(len(orderList)):
@@ -45,8 +45,8 @@ def LexicalOrder(orderList):
     orderList = orderList[:x+1]
     orderList.extend(RightSidereversed)
     # print(orderList)
-
-    return orderList
+    print(x)
+    return orderList, x
 
 def translateValue(value, min1, max1, min2, max2):
     return min2 + (max2 - min2)* ((value-min1)/(max1-min1))

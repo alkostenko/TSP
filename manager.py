@@ -1,19 +1,25 @@
 import pygame
 import random
+import pandas as pd
+import numpy as np
+import time
 from random import randint, sample
 from point import Point
 from utils import *
 from genetic import Genetic
 from ant_colony import *
 from ant import *
+# from main import num_of_points
 
 offset          = 100
 width, height   = 1920, 1080
 populationSize  = 300
-n = 15
+n = 7
 colony_size = 10
 iterations = 300
 pygame.font.init()
+
+time_df=pd.read_csv('time.csv')
 
 class Manager(object):
     size            = (width, height)
@@ -24,9 +30,9 @@ class Manager(object):
     max_radius      = 15
     Black           = (0, 0, 0)
     White           = (255, 255, 255)
-    Yellow          = (20, 112, 145)
+    Yellow          = (156, 203, 190)
     Gray            = (100, 100, 100)
-    Highlight       = (20, 112, 145)
+    Highlight       = (156, 203, 190)
     LineThickness   = 4
     showIndex       = True
     n_points        = n
@@ -39,6 +45,10 @@ class Manager(object):
 
     Order           = [i for i in range(n_points)]
     counter         = 0
+    start_time=0
+    time=0
+    stop=False
+    percent=0
 
     def __init__(self, Points = [Point(randint(offset, width-offset), randint(offset, height-offset)) for i in range(n_points)]):
         self.Points          = Points
@@ -49,6 +59,9 @@ class Manager(object):
         # --- Ant Colony ---
         self.antColony = AntColony(variation="ACS", size=colony_size, max_iterations = iterations,
                          nodes=self.Points.copy(), alpha=1, beta=3, rho=0.1, pheromone=1, phe_deposit_weight=1)
+
+    def SetNumberOfPoints(self, num):
+        self.n_points=num
 
     def ResetGenetic(self):
         self.genetic = Genetic([sample(list(range(n)), n) for i in range(populationSize)], populationSize)
@@ -72,26 +85,57 @@ class Manager(object):
         if self.counter > self.PossibleCombinations:
             self.counter = self.PossibleCombinations
 
+    def ResetTime(self):
+        self.start_time=time.time()
+
+    def Time(self):
+        if not self.stop:
+            self.time=time.time()-self.start_time
+        self.ShowTime()
+            
+    def ShowTime(self):
+        textColor   = (255, 255, 255)
+        # textFont    = pg.font.Font("freesansbold.ttf", size)
+        textFont    = pygame.font.SysFont("Arial", 20)
+        textSurface = textFont.render(str(round(self.time, 4)), False, textColor)
+        self.screen.blit(textSurface, (width//2, 50))
+
+    def WriteTimeData(self, method):
+        df=pd.read_csv('time.csv')
+        index=df.index[(df['Method']==method) & (df['NumberOfPoints']==self.n_points)][0]
+        df.loc[index, ['Time']]=self.time
+        df=df[['Method', 'NumberOfPoints', 'Time']]
+        df.to_csv('time.csv')
+
     def BruteForce(self):
         if self.counter != self.PossibleCombinations:
             i1 = randint(0, self.n_points-1)
             i2 = randint(0, self.n_points-1)
             self.Points[i1], self.Points[i2] = self.Points[i2], self.Points[i1]
+        else:
+            self.stop=True
+            self.WriteTimeData('BruteForce')
 
-        # self.Counter()
+        self.Counter()
 
         dist = SumDistance(self.Points)
         if dist < self.recordDistance:
             self.recordDistance  = dist
             self.OptimalRoutes   = self.Points.copy()
-            #print("Shortest distance : {}" .format(self.recordDistance))
+            # print("Shortest distance : {}" .format(self.recordDistance))
 
         self.DrawLines()
+
     def Lexicographic(self):
-        self.Order = LexicalOrder(self.Order)
-        nodes = []
-        for i in self.Order:
-            nodes.append(self.Points[i])
+        x=0
+        if x!=-1:
+            self.Order, x = LexicalOrder(self.Order)
+            nodes = []
+            for i in self.Order:
+                nodes.append(self.Points[i])
+        else:
+            self.stop=True
+            self.WriteTimeData('LexicographicOrder')
 
         self.Counter()
 
@@ -103,8 +147,12 @@ class Manager(object):
         self.DrawLines()
 
     def GeneticAlgorithm(self):
-        self.genetic.CalculateFitness(self.Points)
-        self.genetic.NaturalSelection()
+        if np.square(np.sum(np.power(self.genetic.fitness)))<=0.8:
+            self.genetic.CalculateFitness(self.Points)
+            self.genetic.NaturalSelection()
+        else:
+            self.stop=True
+            self.WriteTimeData('GeneticAlgorithm')
 
         # self.Counter()
         for i in range(self.n_points):
@@ -113,7 +161,6 @@ class Manager(object):
             for i in range(self.n_points):
                 self.OptimalRoutes[i] = self.Points[self.genetic.fitest[i]]
             self.recordDistance = self.genetic.record
-
         # print(self.OptimalRoutes)
 
         self.DrawLines(True)
@@ -126,6 +173,15 @@ class Manager(object):
 
             if self.counter < self.antColony.max_iterations:
                 self.antColony.Simulate(self.counter)
+        if self.percent==100.0:
+            self.stop=True
+            if self.antColony.variation=='ACS':
+                variation='AntColonyACS'
+            elif self.antColony.variation=='ELITIST':
+                variation='AntColonyElitist'
+            else:
+                variation='AntColonyMaxMin'
+            self.WriteTimeData(variation)
 
         self.antColony.Draw(self)
         self.recordDistance = self.antColony.best_distance
@@ -138,12 +194,13 @@ class Manager(object):
         self.currentList     = self.Points.copy()
 
     def Percentage(self, val):
-        percent = (self.counter/val) * 100
-        textColor   = (255, 255, 255)
-        # textFont    = pg.font.Font("freesansbold.ttf", size)
-        textFont    = pygame.font.SysFont("Arial", 20)
-        textSurface = textFont.render(str(round(percent, 4)), False, textColor)
-        self.screen.blit(textSurface, (width//2, 50))
+        self.percent = (self.counter/val) * 100
+        # textColor   = (255, 255, 255)
+        # # textFont    = pg.font.Font("freesansbold.ttf", size)
+        # textFont    = pygame.font.SysFont("Arial", 20)
+        # textSurface = textFont.render(str(round(self.percent, 4)), False, textColor)
+        # self.screen.blit(textSurface, (width//2, 50))
+
 
     def ShowText(self, selectedIndex, started = True):
         textColor   = (255, 255, 255)

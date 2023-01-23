@@ -4,8 +4,10 @@ from manager import *
 from random import randint
 from user_interface.setup import *
 from utils import SumDistance
+import time
 
 pygame.init()
+
 
 manager = Manager()
 antColonyTypes = ["ACS", "ELITIST", "MAX-MIN"]
@@ -25,6 +27,7 @@ RandomButton.state = GenerateToggle
 
 showUI = False
 run = True
+
 while run:
     manager.Background()
 
@@ -53,9 +56,12 @@ while run:
     if selectedIndex == 0:
         if pause == False:
             manager.BruteForce()
+        
         manager.DrawPoints()
         manager.DrawShortestPath()
         # manager.Percentage(manager.PossibleCombinations)
+        # manager.Time()
+
     elif selectedIndex == 1:
         if pause == False:
             manager.Lexicographic()
@@ -98,17 +104,22 @@ while run:
             manager.recordDistance = SumDistance(manager.Points)
             manager.ResetAntColony(manager.antColony.variation)
             manager.ResetGenetic()
+            manager.ResetTime()
 
         GenerateToggle = RandomButton.state
         if GenerateToggle == True:
             manager.RandomPoints()
             GenerateToggle = False
             RandomButton.state = False
+            manager.ResetTime()
 
         if pause == True:
             PauseButton.text = "Continue"
+            manager.ShowTime()
         else:
             PauseButton.text = "Pause"
+            
+            manager.Time()
 
         if rightMouseClicked:
             selectedIndex = AlgorithmChoice.currentIndex
@@ -121,4 +132,5 @@ while run:
 
     pygame.display.flip()
     rightMouseClicked = False
+
 pygame.quit()
